@@ -59,6 +59,7 @@ namespace ImageServer
                     HttpListenerContext ctx = _listener.GetContext();
                     idleTimer?.Change(idleTimeout!.Value, Timeout.InfiniteTimeSpan);
                     _queue.Add(ctx);
+                    Logger.Log($"[Prijem] Zahtev za '{ctx.Request.Url?.AbsolutePath}' dodat u red.");
                 }
                 catch (HttpListenerException) { break; }
                 catch (ObjectDisposedException) { break; }

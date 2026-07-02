@@ -129,29 +129,27 @@ namespace ImageServer
                 _pendingRequests[fileName] = tcs;
             }
 
-            byte[]? data = null;
-            try
-            {
-                Logger.Log($"[MISS] '{fileName}' - citam sa diska.");
-                data = await FindAndLoadImageAsync(fileName);
-                if (data != null)
-                    _cache.Add(fileName, data);
-                tcs.SetResult(data);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Greska pri preuzimanju '{fileName}': {ex.Message}");
-                tcs.SetResult(null);
-            }
-            finally
-            {
-                lock (_lock) { _pendingRequests.Remove(fileName); }
-            }
+            await FindAndLoadImageAsync(fileName)
+                .ContinueWith(async fetchTask =>
+                {
+                    byte[]? data = null;
+                    if (fetchTask.IsFaulted)
+                        Logger.Error($"Greska pri preuzimanju '{fileName}': {fetchTask.Exception!.InnerException?.Message}");
+                    else
+                        data = fetchTask.Result;
 
-            if (data != null)
-                await SendImageAsync(response, data, fileName);
-            else
-                await SendResponseAsync(response, $"Fajl '{fileName}' nije pronadjen.", 404);
+                    if (data != null)
+                        _cache.Add(fileName, data);
+
+                    tcs.SetResult(data);
+                    lock (_lock) { _pendingRequests.Remove(fileName); }
+
+                    if (data != null)
+                        await SendImageAsync(response, data, fileName);
+                    else
+                        await SendResponseAsync(response, $"Fajl '{fileName}' nije pronadjen.", 404);
+                })
+                .Unwrap();
         }
 
         private async Task HandleWaiterAsync(Task<byte[]?> ownerTask, HttpListenerContext ctx, string fileName)
